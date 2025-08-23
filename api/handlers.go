@@ -1,26 +1,36 @@
-// handlers.go
-
-package handlers
+package api
 
 import (
-	"example/web-service-gin/models"
-	"fmt"
+	// "fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
+var todos = []Todo{
+	{ID: 1, Title: "Learn Go", Completed: false, CreatedAt: time.Now()},
+	{ID: 2, Title: "Build a web app", Completed: true, CreatedAt: time.Now()},
+}
+
+func WelcomeEndpoint(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"message": "Welcome to the Todo API!"})
+}
+
 func GetTodos(c *gin.Context) {
-	todos := []models.Todo{
-		{ID: 1, Title: "Learn Go", Completed: false, CreatedAt: time.Now()},
-		{ID: 2, Title: "Build a web app", Completed: true, CreatedAt: time.Now()},
-	}
 	c.JSON(http.StatusOK, todos)
 }
 
 func PostTodos(c *gin.Context){
-	fmt.Println("posting todos")
+	var todo Todo
+
+	if err := c.BindJSON(&todo); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	todos = append(todos, todo)
+	c.JSON(http.StatusCreated, todo)
 }
 
 

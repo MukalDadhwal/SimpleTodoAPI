@@ -1,5 +1,4 @@
-// config.go
-package config
+package db
 
 import (
 	"database/sql"

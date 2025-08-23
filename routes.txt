@@ -1,0 +1,6 @@
+GET    /todos        → list todos
+GET    /todos/{id}   → get single todo
+POST   /todos        → create todo
+PUT    /todos/{id}   → update todo
+PATCH  /todos/{id}   → partial update
+DELETE /todos/{id}   → delete todo
