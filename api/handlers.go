@@ -2,6 +2,7 @@ package api
 
 import (
 	// "fmt"
+	"example/web-service-gin/db"
 	"net/http"
 	"time"
 
@@ -18,10 +19,32 @@ func WelcomeEndpoint(c *gin.Context) {
 }
 
 func GetTodos(c *gin.Context) {
+	rows, err := db.DB.Query("SELECT id, title, completed, created_at FROM todos")
+
+	if err != nil {
+		RespondWithError(c, http.StatusInternalServerError, "Cannot fetch the todos from the table", err.Error())
+		return
+	}
+
+	defer rows.Close()
+
+	var todos []Todo
+	for rows.Next() {
+		var todo Todo
+		if err := rows.Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt); err != nil {
+			RespondWithError(c, http.StatusInternalServerError, "Error fetch todos", err.Error())
+			return
+		}
+		todos = append(todos, todo)
+	}
 	c.JSON(http.StatusOK, todos)
+
+	if err := rows.Err(); err != nil {
+		RespondWithError(c, http.StatusInternalServerError, "Error fetching rows", err.Error())
+	}
 }
 
-func PostTodos(c *gin.Context){
+func PostTodos(c *gin.Context) {
 	var todo Todo
 
 	if err := c.BindJSON(&todo); err != nil {
@@ -29,50 +52,97 @@ func PostTodos(c *gin.Context){
 		return
 	}
 
-	todos = append(todos, todo)
+	query := "INSERT INTO todos (title, completed, created_at) VALUES ($1, $2, $3) RETURNING id"
+	err := db.DB.QueryRow(query, todo.Title, todo.Completed, time.Now()).Scan(&todo.ID)
+
+	if err != nil{
+		RespondWithError(c, http.StatusInternalServerError, "Internal server error", err.Error())
+		return
+	}
+
 	c.JSON(http.StatusCreated, todo)
 }
 
+func GetTodoById(c *gin.Context){
+	id := c.Param("id")
 
-// func albumsByArtist(name string) ([]Album, error) {
-// 	rows, err := db.Query("SELECT id, title, artist, price FROM album WHERE artist = $1", name)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("albumsByArtist %q: %v", name, err)
-// 	}
-// 	defer rows.Close()
+	var todo Todo
 
-// 	var albums []Album
-// 	for rows.Next() {
-// 		var a Album
-// 		if err := rows.Scan(&a.ID, &a.Title, &a.Artist, &a.Price); err != nil {
-// 			return nil, err
-// 		}
-// 		albums = append(albums, a)
-// 	}
-// 	if err := rows.Err(); err != nil {
-// 		return nil, err
-// 	}
-// 	return albums, nil
-// }
+	row := db.DB.QueryRow("SELECT * FROM todos WHERE id = $1", id)
+	if err := row.Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt); err != nil{	
+		RespondWithError(c, http.StatusNotFound, "The todo does not exist", err.Error())
+		return
+	}
 
-// // albumByID queries for the album with the specified ID.
-// func albumByID(id int64) (Album, error) {
-// 	var a Album
-// 	row := db.QueryRow("SELECT * FROM album WHERE id = $1", id)
-// 	if err := row.Scan(&a.ID, &a.Title, &a.Artist, &a.Price); err != nil {
-// 		return a, err
-// 	}
-// 	return a, nil
-// }
+	c.JSON(http.StatusOK, todo)
+}
 
-// func addAlbum(album Album) (int64, error) {
-// 	var id int64
-// 	err := db.QueryRow(
-// 		"INSERT INTO album (title, artist, price) VALUES ($1, $2, $3) RETURNING id",
-// 		album.Title, album.Artist, album.Price,
-// 	).Scan(&id)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	return id, nil
-// }
+func UpdateTodoPut(c *gin.Context){
+	id := c.Param("id")
+	var todo Todo
+
+	if err := c.BindJSON(&todo); err != nil{
+		RespondWithError(c, http.StatusInternalServerError, "Internal Server error", err.Error())
+		return
+	}
+	
+	_, err := db.DB.Exec("UPDATE todos SET title=$1, completed=$2 WHERE id=$3", &todo.Title, &todo.Completed, id)
+
+	if err != nil{
+		RespondWithError(c, http.StatusInternalServerError, "Internal server error", err.Error())
+	}
+
+	c.JSON(http.StatusNoContent, gin.H{"message": "Todo updated"})
+}
+
+/*
+
+func UpdateTodoPatch(c *gin.Context) {
+    idParam := c.Param("id")
+
+    // Convert id to integer
+    id, err := strconv.Atoi(idParam)
+    if err != nil {
+        RespondWithError(c, http.StatusBadRequest, "Invalid ID format", err.Error())
+        return
+    }
+
+    var updates map[string]interface{}
+    if err := c.BindJSON(&updates); err != nil {
+        RespondWithError(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+        return
+    }
+
+    // Build the query dynamically based on the fields provided
+    query := "UPDATE todos SET "
+    params := []interface{}{}
+    i := 1
+
+    if title, ok := updates["title"]; ok {
+        query += "title = $" + strconv.Itoa(i) + ", "
+        params = append(params, title)
+        i++
+    }
+
+    if completed, ok := updates["completed"]; ok {
+        query += "completed = $" + strconv.Itoa(i) + ", "
+        params = append(params, completed)
+        i++
+    }
+
+    // Remove trailing comma and space
+    query = query[:len(query)-2]
+    query += " WHERE id = $" + strconv.Itoa(i)
+    params = append(params, id)
+
+    _, err = db.DB.Exec(query, params...)
+    if err != nil {
+        RespondWithError(c, http.StatusInternalServerError, "Failed to update todo", err.Error())
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Todo updated successfully"})
+}
+
+*/
+
