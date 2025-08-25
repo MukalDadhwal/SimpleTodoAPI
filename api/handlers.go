@@ -1,18 +1,14 @@
 package api
 
 import (
-	// "fmt"
 	"example/web-service-gin/db"
+	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
-
-var todos = []Todo{
-	{ID: 1, Title: "Learn Go", Completed: false, CreatedAt: time.Now()},
-	{ID: 2, Title: "Build a web app", Completed: true, CreatedAt: time.Now()},
-}
 
 func WelcomeEndpoint(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Welcome to the Todo API!"})
@@ -95,54 +91,61 @@ func UpdateTodoPut(c *gin.Context){
 	c.JSON(http.StatusNoContent, gin.H{"message": "Todo updated"})
 }
 
-/*
+func UpdateTodosPatch(c *gin.Context){
+	id := c.Param("id")
 
-func UpdateTodoPatch(c *gin.Context) {
-    idParam := c.Param("id")
+	var payload map[string]any
 
-    // Convert id to integer
-    id, err := strconv.Atoi(idParam)
-    if err != nil {
-        RespondWithError(c, http.StatusBadRequest, "Invalid ID format", err.Error())
-        return
-    }
+	if err := c.BindJSON(&payload); err != nil{
+		RespondWithError(c, http.StatusBadRequest, "Invalid request payload", err.Error())
+		return;
+	}
 
-    var updates map[string]interface{}
-    if err := c.BindJSON(&updates); err != nil {
-        RespondWithError(c, http.StatusBadRequest, "Invalid request payload", err.Error())
-        return
-    }
+	query := "UPDATE todos SET "
+	params := []any{}
+	i := 1
 
-    // Build the query dynamically based on the fields provided
-    query := "UPDATE todos SET "
-    params := []interface{}{}
-    i := 1
+	if title, ok := payload["title"]; ok {
+		query += "title = $" + strconv.Itoa(i) + ", "
+		params = append(params, title)
+		i++
+	}
 
-    if title, ok := updates["title"]; ok {
-        query += "title = $" + strconv.Itoa(i) + ", "
-        params = append(params, title)
-        i++
-    }
+	if completed, ok := payload["completed"]; ok {
+		query += "completed = $" + strconv.Itoa(i) + ", "
+		params = append(params, completed)
+		i++
+	}
 
-    if completed, ok := updates["completed"]; ok {
-        query += "completed = $" + strconv.Itoa(i) + ", "
-        params = append(params, completed)
-        i++
-    }
+	query = query[:len(query) - 2]
+	query += " WHERE id = $" + strconv.Itoa(i)
+	params = append(params, id)
 
-    // Remove trailing comma and space
-    query = query[:len(query)-2]
-    query += " WHERE id = $" + strconv.Itoa(i)
-    params = append(params, id)
+	fmt.Println(params)
+	fmt.Println(len(params))
+	fmt.Print(query)
+	_, err := db.DB.Exec(query, params...)
 
-    _, err = db.DB.Exec(query, params...)
-    if err != nil {
-        RespondWithError(c, http.StatusInternalServerError, "Failed to update todo", err.Error())
-        return
-    }
+	if err != nil{
+		RespondWithError(c, http.StatusInternalServerError, "Failed to updated todo", err.Error())
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Todo updated successfully"})
+
+	c.JSON(http.StatusNoContent, gin.H{"message": "Todo updated successfully"})
+
 }
 
-*/
+func DeleteTodo(c *gin.Context){
+	id := c.Param("id")
 
+	query := "DELETE FROM todos WHERE id = $1"
+	_, err := db.DB.Exec(query, id)
+
+	if err != nil {
+		RespondWithError(c, http.StatusInternalServerError, "Failed to delete todo", err.Error())
+		return;
+	}
+
+	c.JSON(http.StatusNoContent, gin.H{"message": "todo deleted successfully"})
+}
